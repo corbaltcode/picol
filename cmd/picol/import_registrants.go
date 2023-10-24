@@ -15,16 +15,16 @@ import (
 	"github.com/corbaltcode/picol/internal/ddbutil"
 )
 
-func importCrops(ctx context.Context, args []string) int {
-	flags := flag.NewFlagSet("import-crops", flag.ExitOnError)
-	allowUpdate := flags.Bool("allow-update", false, "Allow updating existing crops.")
-	idSequenceOnly := flags.Bool("id-sequence-only", false, "Only update the id sequence, do not import crops.")
+func importRegistrants(ctx context.Context, args []string) int {
+	flags := flag.NewFlagSet("import-registrants", flag.ExitOnError)
+	allowUpdate := flags.Bool("allow-update", false, "Allow updating existing registrants.")
+	idSequenceOnly := flags.Bool("id-sequence-only", false, "Only update the id sequence, do not import registrants.")
 	help := flags.Bool("help", false, "Show help.")
 
 	flags.Usage = func() {
 		out := flags.Output()
-		fmt.Fprintf(out, "Import crop data from a JSON file.\n")
-		fmt.Fprintf(out, "Usage: %s import-crops [options] <filename>\n", os.Args[0])
+		fmt.Fprintf(out, "Import registrant data from a JSON file.\n")
+		fmt.Fprintf(out, "Usage: %s import-registrants [options] <filename>\n", os.Args[0])
 		fmt.Fprintf(out, "\n")
 		fmt.Fprintf(out, "Options:\n")
 		flags.PrintDefaults()
@@ -69,8 +69,8 @@ func importCrops(ctx context.Context, args []string) int {
 	}
 
 	decoder := json.NewDecoder(input)
-	var crops picolApiV1.Response[picolApiV1.Crop]
-	err := decoder.Decode(&crops)
+	var registrants picolApiV1.Response[picolApiV1.Registrant]
+	err := decoder.Decode(&registrants)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error decoding JSON: %s\n", err)
 		return 1
@@ -78,32 +78,28 @@ func importCrops(ctx context.Context, args []string) int {
 
 	awsConfig := CtxGetAWSConfig(ctx)
 	tablePrefix := CtxGetDynamoDBTablePrefix(ctx)
-
 	ddbClient := dynamodb.NewFromConfig(awsConfig)
-	tableName := aws.String(fmt.Sprintf("%sCrops", tablePrefix))
-
-	highestCropId := 0
+	highestRegistrantId := 0
 	uii := dynamodb.UpdateItemInput{
-		TableName: tableName,
+		TableName: aws.String(fmt.Sprintf("%sRegistrants", tablePrefix)),
 		ExpressionAttributeNames: map[string]string{
-			"#Code":  "Code",
-			"#Name":  "Name",
-			"#Notes": "Notes",
+			"#Name": "Name",
+			"#Url":  "Url",
 		},
 	}
 
-	setAll := aws.String("SET #Code = :Code, #Name = :Name, #Notes = :Notes")
-	setAllRemoveNotes := aws.String("SET #Code = :Code, #Name = :Name REMOVE #Notes")
+	setAll := aws.String("SET #Name = :Name, #Url = :Url")
+	setAllRemoveUrl := aws.String("SET #Name = :Name REMOVE #Url")
 
 	if !*allowUpdate {
 		uii.ConditionExpression = aws.String("attribute_not_exists(Id)")
 	}
 
-	for _, apiCrop := range crops.Data {
-		fmt.Printf("%#v\n", apiCrop)
+	for _, apiRegistrant := range registrants.Data {
+		fmt.Printf("%#v\n", apiRegistrant)
 
-		if apiCrop.Id > highestCropId {
-			highestCropId = apiCrop.Id
+		if apiRegistrant.Id > highestRegistrantId {
+			highestRegistrantId = apiRegistrant.Id
 		}
 
 		if *idSequenceOnly {
@@ -111,31 +107,30 @@ func importCrops(ctx context.Context, args []string) int {
 		}
 
 		uii.Key = map[string]ddbTypes.AttributeValue{
-			"Id": ddbutil.N(int64(apiCrop.Id)),
+			"Id": ddbutil.N(int64(apiRegistrant.Id)),
 		}
 
 		uii.ExpressionAttributeValues = map[string]ddbTypes.AttributeValue{
-			":Code": ddbutil.S(apiCrop.Code),
-			":Name": ddbutil.S(apiCrop.Name),
+			":Name": ddbutil.S(apiRegistrant.Name),
 		}
 
-		if apiCrop.Notes != "" {
-			uii.ExpressionAttributeValues[":Notes"] = ddbutil.S(apiCrop.Notes)
+		if apiRegistrant.Website != "" {
+			uii.ExpressionAttributeValues[":Url"] = ddbutil.S(apiRegistrant.Website)
 			uii.UpdateExpression = setAll
 		} else {
-			uii.UpdateExpression = setAllRemoveNotes
+			uii.UpdateExpression = setAllRemoveUrl
 		}
 
 		_, err = ddbClient.UpdateItem(ctx, &uii)
 
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing crop: %s\n", err)
+			fmt.Fprintf(os.Stderr, "Error writing registrant: %s\n", err)
 			return 1
 		}
 	}
 
-	sequenceName := fmt.Sprintf("%sCrops.Id", tablePrefix)
-	err = MaybeUpdateSequence(ctx, ddbClient, sequenceName, int64(highestCropId)+1)
+	sequenceName := fmt.Sprintf("%sRegistrants.Id", tablePrefix)
+	err = MaybeUpdateSequence(ctx, ddbClient, sequenceName, int64(highestRegistrantId)+1)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error updating sequence: %s\n", err)
 		return 1

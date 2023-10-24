@@ -116,7 +116,7 @@ func importPests(ctx context.Context, args []string) int {
 			":Code": ddbutil.S(apiPest.Code),
 		}
 
-		if apiPest.Notes == "" {
+		if apiPest.Notes != "" {
 			uii.ExpressionAttributeValues[":Notes"] = ddbutil.S(apiPest.Notes)
 			uii.UpdateExpression = setAll
 		} else {
@@ -131,7 +131,7 @@ func importPests(ctx context.Context, args []string) int {
 		}
 	}
 
-	sequenceName := fmt.Sprintf("%spests.Id", tablePrefix)
+	sequenceName := fmt.Sprintf("%sPests.Id", tablePrefix)
 	err = MaybeUpdateSequence(ctx, ddbClient, sequenceName, int64(highestPestId)+1)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error updating sequence: %s\n", err)

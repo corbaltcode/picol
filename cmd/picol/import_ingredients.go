@@ -127,7 +127,7 @@ func importIngredients(ctx context.Context, args []string) int {
 			":Code":         ddbutil.S(apiIngredient.Code),
 		}
 
-		if apiIngredient.Notes == "" {
+		if apiIngredient.Notes != "" {
 			ingredientsUII.ExpressionAttributeValues[":Notes"] = ddbutil.S(apiIngredient.Notes)
 			ingredientsUII.UpdateExpression = setAll
 		} else {

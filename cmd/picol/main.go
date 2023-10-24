@@ -32,6 +32,10 @@ var subcommands map[string]SubcommandInfo = map[string]SubcommandInfo{
 		Description: "Import pest data from a JSON file.",
 		Exec:        importPests,
 	},
+	"import-registrants": {
+		Description: "Import registrant data from a JSON file.",
+		Exec:        importRegistrants,
+	},
 	"import-resistances": {
 		Description: "Import resistance data from a JSON file.",
 		Exec:        importResistances,
