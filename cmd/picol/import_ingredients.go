@@ -78,9 +78,7 @@ func importIngredients(ctx context.Context, args []string) int {
 
 	awsConfig := CtxGetAWSConfig(ctx)
 	tablePrefix := CtxGetDynamoDBTablePrefix(ctx)
-
 	ddbClient := dynamodb.NewFromConfig(awsConfig)
-
 	highestIngredientId := 0
 	ingredientsUII := dynamodb.UpdateItemInput{
 		TableName: aws.String(fmt.Sprintf("%sIngredients", tablePrefix)),

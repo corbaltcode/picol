@@ -28,6 +28,10 @@ var subcommands map[string]SubcommandInfo = map[string]SubcommandInfo{
 		Description: "Import ingredient data from a JSON file. Resistances must be imported first.",
 		Exec:        importIngredients,
 	},
+	"import-pests": {
+		Description: "Import pest data from a JSON file.",
+		Exec:        importPests,
+	},
 	"import-resistances": {
 		Description: "Import resistance data from a JSON file.",
 		Exec:        importResistances,

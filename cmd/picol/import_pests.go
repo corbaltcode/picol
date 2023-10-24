@@ -15,17 +15,16 @@ import (
 	"github.com/corbaltcode/picol/internal/ddbutil"
 )
 
-func importResistances(ctx context.Context, args []string) int {
-	flags := flag.NewFlagSet("import-resistances", flag.ExitOnError)
-	allowUpdate := flags.Bool("allow-update", false, "Allow updating existing resistances.")
-	idSequenceOnly := flags.Bool("id-sequence-only", false, "Only update the id sequence, do not import resistances.")
+func importPests(ctx context.Context, args []string) int {
+	flags := flag.NewFlagSet("import-pests", flag.ExitOnError)
+	allowUpdate := flags.Bool("allow-update", false, "Allow updating existing pests.")
+	idSequenceOnly := flags.Bool("id-sequence-only", false, "Only update the id sequence, do not import pests.")
 	help := flags.Bool("help", false, "Show help.")
-	clearIngredients := flags.Bool("clear-ingredients", true, "Clear the ingredients list for each imported resistance.")
 
 	flags.Usage = func() {
 		out := flags.Output()
-		fmt.Fprintf(out, "Import resistance data from a JSON file.\n")
-		fmt.Fprintf(out, "Usage: %s import-resistances [options] <filename>\n", os.Args[0])
+		fmt.Fprintf(out, "Import pest data from a JSON file.\n")
+		fmt.Fprintf(out, "Usage: %s import-pests [options] <filename>\n", os.Args[0])
 		fmt.Fprintf(out, "\n")
 		fmt.Fprintf(out, "Options:\n")
 		flags.PrintDefaults()
@@ -70,8 +69,8 @@ func importResistances(ctx context.Context, args []string) int {
 	}
 
 	decoder := json.NewDecoder(input)
-	var resistances picolApiV1.Response[picolApiV1.Resistance]
-	err := decoder.Decode(&resistances)
+	var pests picolApiV1.Response[picolApiV1.Pest]
+	err := decoder.Decode(&pests)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error decoding JSON: %s\n", err)
 		return 1
@@ -80,32 +79,28 @@ func importResistances(ctx context.Context, args []string) int {
 	awsConfig := CtxGetAWSConfig(ctx)
 	tablePrefix := CtxGetDynamoDBTablePrefix(ctx)
 	ddbClient := dynamodb.NewFromConfig(awsConfig)
-	highestResistanceId := 0
+	highestPestId := 0
 	uii := dynamodb.UpdateItemInput{
-		TableName: aws.String(fmt.Sprintf("%sResistances", tablePrefix)),
+		TableName: aws.String(fmt.Sprintf("%sPests", tablePrefix)),
 		ExpressionAttributeNames: map[string]string{
-			"#Source":         "Source",
-			"#Code":           "Code",
-			"#MethodOfAction": "MethodOfAction",
+			"#Name":  "Name",
+			"#Code":  "Code",
+			"#Notes": "Notes",
 		},
 	}
 
-	if *clearIngredients {
-		uii.UpdateExpression = aws.String("SET #Source = :Source, #Code = :Code, #MethodOfAction = :MethodOfAction REMOVE #Ingredients")
-		uii.ExpressionAttributeNames["#Ingredients"] = "Ingredients"
-	} else {
-		uii.UpdateExpression = aws.String("SET #Source = :Source, #Code = :Code, #MethodOfAction = :MethodOfAction")
-	}
+	setAll := aws.String("SET #Name = :Name, #Code = :Code, #Notes = :Notes")
+	setAllRemoveNotes := aws.String("SET #Name = :Name, #Code = :Code REMOVE #Notes")
 
 	if !*allowUpdate {
 		uii.ConditionExpression = aws.String("attribute_not_exists(Id)")
 	}
 
-	for _, apiResistance := range resistances.Data {
-		fmt.Printf("%#v\n", apiResistance)
+	for _, apiPest := range pests.Data {
+		fmt.Printf("%#v\n", apiPest)
 
-		if apiResistance.Id > highestResistanceId {
-			highestResistanceId = apiResistance.Id
+		if apiPest.Id > highestPestId {
+			highestPestId = apiPest.Id
 		}
 
 		if *idSequenceOnly {
@@ -113,25 +108,31 @@ func importResistances(ctx context.Context, args []string) int {
 		}
 
 		uii.Key = map[string]ddbTypes.AttributeValue{
-			"Id": ddbutil.N(int64(apiResistance.Id)),
+			"Id": ddbutil.N(int64(apiPest.Id)),
 		}
 
 		uii.ExpressionAttributeValues = map[string]ddbTypes.AttributeValue{
-			":Source":         ddbutil.S(apiResistance.Source),
-			":Code":           ddbutil.S(apiResistance.Code),
-			":MethodOfAction": ddbutil.S(apiResistance.MethodOfAction),
+			":Name": ddbutil.S(apiPest.Name),
+			":Code": ddbutil.S(apiPest.Code),
+		}
+
+		if apiPest.Notes == "" {
+			uii.ExpressionAttributeValues[":Notes"] = ddbutil.S(apiPest.Notes)
+			uii.UpdateExpression = setAll
+		} else {
+			uii.UpdateExpression = setAllRemoveNotes
 		}
 
 		_, err = ddbClient.UpdateItem(ctx, &uii)
 
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing resistance: %s\n", err)
+			fmt.Fprintf(os.Stderr, "Error writing pest: %s\n", err)
 			return 1
 		}
 	}
 
-	sequenceName := fmt.Sprintf("%sResistances.Id", tablePrefix)
-	err = MaybeUpdateSequence(ctx, ddbClient, sequenceName, int64(highestResistanceId)+1)
+	sequenceName := fmt.Sprintf("%spests.Id", tablePrefix)
+	err = MaybeUpdateSequence(ctx, ddbClient, sequenceName, int64(highestPestId)+1)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error updating sequence: %s\n", err)
 		return 1
