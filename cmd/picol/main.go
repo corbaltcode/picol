@@ -6,12 +6,33 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/smithy-go/logging"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
+
+type SubcommandInfo struct {
+	Description string
+	Exec        func(ctx context.Context, args []string) int
+}
+
+var subcommands map[string]SubcommandInfo = map[string]SubcommandInfo{
+	"import-crops": {
+		Description: "Import crop data from a JSON file.",
+		Exec:        importCrops,
+	},
+	"import-ingredients": {
+		Description: "Import ingredient data from a JSON file. Resistances must be imported first.",
+		Exec:        importIngredients,
+	},
+	"import-resistances": {
+		Description: "Import resistance data from a JSON file.",
+		Exec:        importResistances,
+	},
+}
 
 func main() {
 	cliFlags := flag.NewFlagSet("picol", flag.ExitOnError)
@@ -32,7 +53,15 @@ func main() {
 		cliFlags.PrintDefaults()
 		fmt.Fprintf(out, "\n")
 		fmt.Fprintf(out, "Subcommands:\n")
-		fmt.Fprintf(out, "  import-crops  Import crop data from a JSON file.\n")
+		subcommandNames := make([]string, 0, len(subcommands))
+		for name := range subcommands {
+			subcommandNames = append(subcommandNames, name)
+		}
+		sort.Strings(subcommandNames)
+		for _, name := range subcommandNames {
+			subcommand := subcommands[name]
+			fmt.Fprintf(out, "  %s %s\n", name, subcommand.Description)
+		}
 	}
 
 	cliFlags.Parse(os.Args[1:])
@@ -94,12 +123,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	switch cliFlags.Arg(0) {
-	case "import-crops":
-		os.Exit(importCrops(ctx, cliFlags.Args()[1:]))
-	default:
+	subcommand := subcommands[cliFlags.Arg(0)]
+	if subcommand.Exec == nil {
 		fmt.Fprintf(os.Stderr, "Unknown subcommand: %s\n", cliFlags.Arg(0))
 		cliFlags.Usage()
 		os.Exit(1)
 	}
+
+	os.Exit(subcommand.Exec(ctx, cliFlags.Args()[1:]))
 }

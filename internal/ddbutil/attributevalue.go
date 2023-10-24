@@ -35,3 +35,19 @@ func BOOL(b bool) *ddbTypes.AttributeValueMemberBOOL {
 func NULL(isNull bool) *ddbTypes.AttributeValueMemberNULL {
 	return &ddbTypes.AttributeValueMemberNULL{Value: isNull}
 }
+
+// NS creates a new DynamoDB number set attribute value member from a list of integers.
+func NS(ns []int64) *ddbTypes.AttributeValueMemberNS {
+	s := make([]string, len(ns))
+	for i, n := range ns {
+		s[i] = strconv.FormatInt(n, 10)
+	}
+	return &ddbTypes.AttributeValueMemberNS{Value: s}
+}
+
+// NS1 creates a new DynamoDB number set attribute value member from a single integer.
+func NS1(n int64) *ddbTypes.AttributeValueMemberNS {
+	s := make([]string, 1)
+	s[0] = strconv.FormatInt(n, 10)
+	return &ddbTypes.AttributeValueMemberNS{Value: s}
+}
